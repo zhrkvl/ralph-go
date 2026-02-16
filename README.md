@@ -1,6 +1,6 @@
-# Ralph
+# Minimal Ralph in Go
 
-TUI for running autonomous AI agent loops. Drives Claude or Amp through user stories defined in a `prd.json`, showing real-time agent output, story progress, and session history.
+Lightweight Go rewrite of [Ralph](https://github.com/snarktank/ralph) with a built-in TUI. Drives Claude or Amp through user stories defined in a `prd.json`, showing real-time agent output, story progress, and session history.
 
 ![Go](https://img.shields.io/badge/Go-1.25-blue)
 
