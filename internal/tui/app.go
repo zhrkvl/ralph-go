@@ -39,6 +39,7 @@ type agentStartedMsg struct {
 
 type agentDoneMsg struct {
 	completed bool
+	errMsg    string // non-empty if agent failed to start
 }
 
 type prdReloadMsg struct{ p *prd.PRD }
@@ -169,6 +170,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.agentRunning = false
 		m.agentPaused = false
 		m.currentAgent = nil
+
+		// Show error if agent failed to start
+		if msg.errMsg != "" {
+			m.appendOutput(errorStyle.Render("Agent error: " + msg.errMsg))
+		}
 
 		// Check accumulated output for completion signal
 		completed := msg.completed
@@ -481,10 +487,10 @@ func (m *Model) startAgentCmd() tea.Cmd {
 			if iterLog != nil {
 				iterLog.Close(false, false)
 			}
-			return agentDoneMsg{completed: false}
+			return agentDoneMsg{completed: false, errMsg: err.Error()}
 		}
 
-		_ = iter // used for logging
+		_ = iter
 		return agentStartedMsg{
 			outputCh: ch,
 			agent:    a,

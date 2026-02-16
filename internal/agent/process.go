@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -21,8 +22,13 @@ type ProcessManager struct {
 	mu        sync.Mutex
 }
 
-// start launches the command and returns a channel that streams output lines.
-func (pm *ProcessManager) start(cmd *exec.Cmd) (<-chan string, error) {
+// start launches the command with the given stdin and returns a channel
+// that streams output lines in real time.
+//
+// Uses OS-level pipes (not io.Pipe) for stdout/stderr. OS pipes have a
+// kernel buffer (~64KB), so the subprocess can write freely without blocking.
+// We also set env vars to hint CLIs to use unbuffered/line-buffered output.
+func (pm *ProcessManager) start(cmd *exec.Cmd, stdin io.Reader) (<-chan string, error) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -31,24 +37,43 @@ func (pm *ProcessManager) start(cmd *exec.Cmd) (<-chan string, error) {
 	pm.paused.Store(false)
 	pm.done.Store(false)
 
-	// Use process group so we can pause/kill all children
+	// Process group for pause/resume/kill of all children
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	// Merge stdout and stderr (matching 2>&1 behavior)
-	pr, pw := io.Pipe()
-	cmd.Stdout = pw
-	cmd.Stderr = pw
+	// Set stdin
+	cmd.Stdin = stdin
+
+	// Env vars to encourage real-time output from common runtimes
+	cmd.Env = append(os.Environ(),
+		"TERM=dumb",
+		"NO_COLOR=1",
+		"COLUMNS=200",
+		"LINES=50",
+	)
+
+	// Get pipes for stdout and stderr (OS-level, kernel-buffered)
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("creating stdout pipe: %w", err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("creating stderr pipe: %w", err)
+	}
 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("starting process: %w", err)
 	}
 
-	ch := make(chan string, 100)
+	ch := make(chan string, 256)
 
-	// Read output lines
-	go func() {
-		defer close(ch)
-		scanner := bufio.NewScanner(pr)
+	// Merge stdout and stderr into a single channel (matching 2>&1 behavior)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	readPipe := func(pipe io.ReadCloser) {
+		defer wg.Done()
+		scanner := bufio.NewScanner(pipe)
 		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -58,20 +83,23 @@ func (pm *ProcessManager) start(cmd *exec.Cmd) (<-chan string, error) {
 			pm.mu.Unlock()
 			ch <- line
 		}
-	}()
+	}
 
-	// Close pipe writer when process exits
+	go readPipe(stdoutPipe)
+	go readPipe(stderrPipe)
+
+	// Close channel when both pipes are drained and process exits
 	go func() {
+		wg.Wait()
 		cmd.Wait()
-		pw.Close()
 		pm.done.Store(true)
+		close(ch)
 	}()
 
 	return ch, nil
 }
 
 func (pm *ProcessManager) Wait() (string, error) {
-	// Wait for process to finish — poll since cmd.Wait() is called in goroutine
 	for !pm.done.Load() {
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -87,7 +115,6 @@ func (pm *ProcessManager) Pause() error {
 		return fmt.Errorf("no running process")
 	}
 	pm.paused.Store(true)
-	// Signal the whole process group
 	return syscall.Kill(-pm.cmd.Process.Pid, syscall.SIGSTOP)
 }
 
@@ -109,9 +136,7 @@ func (pm *ProcessManager) Kill() error {
 	}
 	// Resume first in case it's paused
 	syscall.Kill(-pm.cmd.Process.Pid, syscall.SIGCONT)
-	// Then terminate
 	syscall.Kill(-pm.cmd.Process.Pid, syscall.SIGTERM)
-	// Give it a moment, then force kill
 	go func() {
 		time.Sleep(3 * time.Second)
 		if !pm.done.Load() {

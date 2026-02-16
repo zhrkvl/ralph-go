@@ -21,12 +21,11 @@ func (a *AmpAgent) Start(ctx context.Context) (<-chan string, error) {
 	promptPath := filepath.Join(a.ralphDir, "prompt.md")
 	promptContent, err := os.ReadFile(promptPath)
 	if err != nil {
-		return nil, fmt.Errorf("reading prompt.md: %w", err)
+		return nil, fmt.Errorf("reading %s: %w", promptPath, err)
 	}
 
 	cmd := exec.CommandContext(ctx, "amp", "--dangerously-allow-all")
 	cmd.Dir = a.projectDir
-	cmd.Stdin = bytes.NewReader(promptContent)
 
-	return a.start(cmd)
+	return a.start(cmd, bytes.NewReader(promptContent))
 }
