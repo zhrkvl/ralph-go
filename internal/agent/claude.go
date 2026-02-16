@@ -23,8 +23,30 @@ func (a *ClaudeAgent) Start(ctx context.Context) (<-chan string, error) {
 		return nil, fmt.Errorf("opening %s: %w", claudeMDPath, err)
 	}
 
-	cmd := exec.CommandContext(ctx, "claude", "--dangerously-skip-permissions", "--print")
+	cmd := exec.CommandContext(ctx, "claude",
+		"--dangerously-skip-permissions",
+		"--print",
+		"--output-format", "stream-json",
+		"--verbose",
+	)
 	cmd.Dir = a.projectDir
 
-	return a.start(cmd, f)
+	rawCh, err := a.start(cmd, f)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	// Parse the stream-json format into human-readable lines
+	parsedCh := make(chan string, 256)
+	go func() {
+		defer close(parsedCh)
+		for line := range rawCh {
+			for _, parsed := range parseStreamJSON(line) {
+				parsedCh <- parsed
+			}
+		}
+	}()
+
+	return parsedCh, nil
 }

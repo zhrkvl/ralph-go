@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -42,14 +41,6 @@ func (pm *ProcessManager) start(cmd *exec.Cmd, stdin io.Reader) (<-chan string, 
 
 	// Set stdin
 	cmd.Stdin = stdin
-
-	// Env vars to encourage real-time output from common runtimes
-	cmd.Env = append(os.Environ(),
-		"TERM=dumb",
-		"NO_COLOR=1",
-		"COLUMNS=200",
-		"LINES=50",
-	)
 
 	// Get pipes for stdout and stderr (OS-level, kernel-buffered)
 	stdoutPipe, err := cmd.StdoutPipe()
