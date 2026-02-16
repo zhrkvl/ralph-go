@@ -1,0 +1,15 @@
+# Binaries
+ralph-go
+ralph
+*.exe
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Runtime state (per-project, not in this repo)
+.ralph-tui/
