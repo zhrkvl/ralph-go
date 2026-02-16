@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // streamParser accumulates text deltas into lines and emits complete lines.
@@ -13,6 +14,23 @@ type streamParser struct {
 
 func newStreamParser() *streamParser {
 	return &streamParser{}
+}
+
+// stamp prepends a local timestamp to each non-empty line.
+func stamp(lines []string) []string {
+	if len(lines) == 0 {
+		return nil
+	}
+	ts := time.Now().Format("15:04:05")
+	out := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if l == "" {
+			out = append(out, "")
+		} else {
+			out = append(out, ts+" "+l)
+		}
+	}
+	return out
 }
 
 // parseLine converts a single line of Claude's stream-json output
@@ -32,33 +50,33 @@ func (sp *streamParser) parseLine(line string) []string {
 	var event map[string]any
 	if err := json.Unmarshal([]byte(line), &event); err != nil {
 		// Not JSON — return as-is (might be plain text from stderr)
-		return []string{line}
+		return stamp([]string{line})
 	}
 
 	typ, _ := event["type"].(string)
 
 	switch typ {
 	case "stream_event":
-		return sp.parseStreamEvent(event)
+		return stamp(sp.parseStreamEvent(event))
 	case "system":
-		return sp.flushAndParse(parseSystemEvent(event))
+		return stamp(sp.flushAndParse(parseSystemEvent(event)))
 	case "assistant":
-		return sp.flushAndParse(parseAssistantEvent(event))
+		return stamp(sp.flushAndParse(parseAssistantEvent(event)))
 	case "result":
-		return sp.flushAndParse(parseResultEvent(event))
+		return stamp(sp.flushAndParse(parseResultEvent(event)))
 	default:
 		return nil
 	}
 }
 
-// flush emits any accumulated text as a line (even if no trailing newline).
+// flush emits any accumulated text as a stamped line (even if no trailing newline).
 func (sp *streamParser) flush() []string {
 	if sp.textBuf.Len() == 0 {
 		return nil
 	}
 	line := sp.textBuf.String()
 	sp.textBuf.Reset()
-	return []string{line}
+	return stamp([]string{line})
 }
 
 // flushAndParse flushes the text buffer before returning other parsed lines.

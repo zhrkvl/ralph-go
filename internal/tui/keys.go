@@ -3,16 +3,17 @@ package tui
 import "github.com/charmbracelet/bubbles/key"
 
 type keyMap struct {
-	Quit      key.Binding
-	Tab       key.Binding
-	Pause     key.Binding
-	Skip      key.Binding
-	Up        key.Binding
-	Down      key.Binding
-	Enter     key.Binding
-	Esc       key.Binding
-	PageUp    key.Binding
-	PageDown  key.Binding
+	Quit         key.Binding
+	Tab          key.Binding
+	Pause        key.Binding
+	Skip         key.Binding
+	Timestamps   key.Binding
+	Up           key.Binding
+	Down         key.Binding
+	Enter        key.Binding
+	Esc          key.Binding
+	PageUp       key.Binding
+	PageDown     key.Binding
 	HalfPageUp   key.Binding
 	HalfPageDown key.Binding
 }
@@ -33,6 +34,10 @@ var keys = keyMap{
 	Skip: key.NewBinding(
 		key.WithKeys("s"),
 		key.WithHelp("s", "skip"),
+	),
+	Timestamps: key.NewBinding(
+		key.WithKeys("t"),
+		key.WithHelp("t", "timestamps"),
 	),
 	Up: key.NewBinding(
 		key.WithKeys("up", "k"),

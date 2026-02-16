@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/zhrkvl/ralph-go/internal/prd"
 )
 
 func renderDashboard(m *Model) string {
@@ -131,10 +130,25 @@ func initViewport(width, height int) viewport.Model {
 	return vp
 }
 
-func updateViewportContent(vp *viewport.Model, lines []string, _ *prd.PRD) {
-	content := strings.Join(lines, "\n")
-	vp.SetContent(content)
+func updateViewportContent(vp *viewport.Model, lines []string, showTimestamps bool) {
+	if showTimestamps {
+		vp.SetContent(strings.Join(lines, "\n"))
+	} else {
+		stripped := make([]string, len(lines))
+		for i, l := range lines {
+			stripped[i] = stripTimestamp(l)
+		}
+		vp.SetContent(strings.Join(stripped, "\n"))
+	}
 	vp.GotoBottom()
+}
+
+// stripTimestamp removes the "HH:MM:SS " prefix added by the stream parser's stamp().
+func stripTimestamp(line string) string {
+	if len(line) >= 9 && line[2] == ':' && line[5] == ':' && line[8] == ' ' {
+		return line[9:]
+	}
+	return line
 }
 
 func lipglossWidth(s string) int {

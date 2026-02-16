@@ -19,6 +19,7 @@ func renderStatusBar(view View, agentRunning bool, width int) string {
 		hints = append(hints, keyHint("Esc", "back"))
 	}
 
+	hints = append(hints, keyHint("t", "timestamps"))
 	hints = append(hints, keyHint("↑↓", "scroll"))
 	hints = append(hints, keyHint("q", "quit"))
 

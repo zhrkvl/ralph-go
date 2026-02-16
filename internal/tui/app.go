@@ -74,7 +74,8 @@ type Model struct {
 	cancelAgent    context.CancelFunc
 
 	// Viewport for agent output
-	viewport viewport.Model
+	viewport       viewport.Model
+	showTimestamps bool
 
 	// List cursors
 	storyCursor   int
@@ -112,10 +113,11 @@ func NewModel(opts Options) Model {
 		iteration:     0,
 		sessionStatus: "running",
 		outputLines:   make([]string, 0, maxOutputLines),
-		archives:      loadArchives(opts.RalphDir),
-		sess:          opts.Session,
-		viewport:      viewport.New(80, 20),
+		archives:       loadArchives(opts.RalphDir),
+		sess:           opts.Session,
+		viewport:       viewport.New(80, 20),
 		detailViewport: viewport.New(80, 20),
+		showTimestamps: true,
 	}
 }
 
@@ -133,7 +135,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.viewport = initViewport(m.width, m.height)
 		m.detailViewport = viewport.New(m.width, m.height-5)
-		updateViewportContent(&m.viewport, m.outputLines, m.prd)
+		updateViewportContent(&m.viewport, m.outputLines, m.showTimestamps)
 		m.ready = true
 		return m, nil
 
@@ -287,6 +289,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case key.Matches(msg, keys.Timestamps):
+		m.showTimestamps = !m.showTimestamps
+		updateViewportContent(&m.viewport, m.outputLines, m.showTimestamps)
+		return m, nil
+
 	case key.Matches(msg, keys.Esc):
 		switch m.activeView {
 		case viewStoryDetail:
@@ -415,7 +422,7 @@ func (m *Model) appendOutput(line string) {
 	if len(m.outputLines) > maxOutputLines {
 		m.outputLines = m.outputLines[len(m.outputLines)-maxOutputLines:]
 	}
-	updateViewportContent(&m.viewport, m.outputLines, m.prd)
+	updateViewportContent(&m.viewport, m.outputLines, m.showTimestamps)
 }
 
 func (m *Model) togglePause() {
