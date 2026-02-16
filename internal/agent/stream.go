@@ -6,14 +6,24 @@ import (
 	"strings"
 )
 
-// parseStreamJSON converts a single line of Claude's stream-json output
+// streamParser accumulates text deltas into lines and emits complete lines.
+type streamParser struct {
+	textBuf strings.Builder // accumulates text deltas until newline
+}
+
+func newStreamParser() *streamParser {
+	return &streamParser{}
+}
+
+// parseLine converts a single line of Claude's stream-json output
 // into zero or more human-readable display lines for the TUI.
 //
-// Stream-json format (one JSON object per line):
+// Stream-json with --include-partial-messages produces these event types:
 //   {"type":"system","subtype":"init",...}
 //   {"type":"assistant","message":{"content":[{"type":"text","text":"..."},{"type":"tool_use",...}]}}
-//   {"type":"result","subtype":"success",...}
-func parseStreamJSON(line string) []string {
+//   {"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}}
+//   {"type":"result",...}
+func (sp *streamParser) parseLine(line string) []string {
 	line = strings.TrimSpace(line)
 	if line == "" {
 		return nil
@@ -28,15 +38,69 @@ func parseStreamJSON(line string) []string {
 	typ, _ := event["type"].(string)
 
 	switch typ {
+	case "stream_event":
+		return sp.parseStreamEvent(event)
 	case "system":
-		return parseSystemEvent(event)
+		return sp.flushAndParse(parseSystemEvent(event))
 	case "assistant":
-		return parseAssistantEvent(event)
+		return sp.flushAndParse(parseAssistantEvent(event))
 	case "result":
-		return parseResultEvent(event)
+		return sp.flushAndParse(parseResultEvent(event))
 	default:
 		return nil
 	}
+}
+
+// flush emits any accumulated text as a line (even if no trailing newline).
+func (sp *streamParser) flush() []string {
+	if sp.textBuf.Len() == 0 {
+		return nil
+	}
+	line := sp.textBuf.String()
+	sp.textBuf.Reset()
+	return []string{line}
+}
+
+// flushAndParse flushes the text buffer before returning other parsed lines.
+func (sp *streamParser) flushAndParse(lines []string) []string {
+	flushed := sp.flush()
+	return append(flushed, lines...)
+}
+
+// parseStreamEvent handles token-by-token text_delta events.
+func (sp *streamParser) parseStreamEvent(event map[string]any) []string {
+	ev, ok := event["event"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	// Check for content_block_delta with text_delta
+	delta, ok := ev["delta"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	deltaType, _ := delta["type"].(string)
+	if deltaType != "text_delta" {
+		return nil
+	}
+
+	text, _ := delta["text"].(string)
+	if text == "" {
+		return nil
+	}
+
+	// Accumulate text. Emit complete lines (split on newline).
+	var lines []string
+	for _, ch := range text {
+		if ch == '\n' {
+			lines = append(lines, sp.textBuf.String())
+			sp.textBuf.Reset()
+		} else {
+			sp.textBuf.WriteRune(ch)
+		}
+	}
+	return lines
 }
 
 func parseSystemEvent(event map[string]any) []string {
@@ -53,8 +117,6 @@ func parseSystemEvent(event map[string]any) []string {
 		if name != "" {
 			return []string{fmt.Sprintf("[hook] %s", name)}
 		}
-	case "hook_response":
-		// Skip verbose hook output
 	}
 	return nil
 }
@@ -82,7 +144,6 @@ func parseAssistantEvent(event map[string]any) []string {
 		case "text":
 			text, _ := block["text"].(string)
 			if text != "" {
-				// Split multi-line text into separate lines
 				for _, l := range strings.Split(text, "\n") {
 					lines = append(lines, l)
 				}
@@ -94,10 +155,8 @@ func parseAssistantEvent(event map[string]any) []string {
 			lines = append(lines, formatToolUse(name, input))
 
 		case "tool_result":
-			// Show truncated tool result
 			content := extractToolResultContent(block)
 			if content != "" {
-				// Just show first line, truncated
 				first := strings.SplitN(content, "\n", 2)[0]
 				if len(first) > 120 {
 					first = first[:117] + "..."
@@ -183,7 +242,6 @@ func formatToolUse(name string, input map[string]any) string {
 }
 
 func extractToolResultContent(block map[string]any) string {
-	// Tool results can have various content formats
 	if content, ok := block["content"].(string); ok {
 		return content
 	}

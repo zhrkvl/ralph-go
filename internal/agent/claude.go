@@ -28,6 +28,7 @@ func (a *ClaudeAgent) Start(ctx context.Context) (<-chan string, error) {
 		"--print",
 		"--output-format", "stream-json",
 		"--verbose",
+		"--include-partial-messages",
 	)
 	cmd.Dir = a.projectDir
 
@@ -37,14 +38,19 @@ func (a *ClaudeAgent) Start(ctx context.Context) (<-chan string, error) {
 		return nil, err
 	}
 
-	// Parse the stream-json format into human-readable lines
+	// Parse stream-json into human-readable lines with stateful delta accumulation
 	parsedCh := make(chan string, 256)
 	go func() {
 		defer close(parsedCh)
+		parser := newStreamParser()
 		for line := range rawCh {
-			for _, parsed := range parseStreamJSON(line) {
+			for _, parsed := range parser.parseLine(line) {
 				parsedCh <- parsed
 			}
+		}
+		// Flush any remaining partial text
+		for _, flushed := range parser.flush() {
+			parsedCh <- flushed
 		}
 	}()
 
