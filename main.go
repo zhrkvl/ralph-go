@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -13,11 +14,12 @@ import (
 )
 
 var (
-	toolFlag       string
-	modelFlag      string
-	maxIterFlag    int
-	ralphDirFlag   string
-	projectDirFlag string
+	toolFlag           string
+	modelFlag          string
+	maxIterFlag        int
+	ralphDirFlag       string
+	projectDirFlag     string
+	installClaudeFlag  bool
 )
 
 func main() {
@@ -33,6 +35,7 @@ func main() {
 	rootCmd.Flags().IntVar(&maxIterFlag, "max-iterations", 0, "maximum iterations (default from config or 10)")
 	rootCmd.Flags().StringVar(&ralphDirFlag, "ralph-dir", "", "directory containing prd.json and CLAUDE.md")
 	rootCmd.Flags().StringVar(&projectDirFlag, "project-dir", "", "working directory for agent (default: CWD)")
+	rootCmd.Flags().BoolVar(&installClaudeFlag, "install-claude", false, "download scripts/ralph (CLAUDE.md, ralph.sh) from github.com/snarktank/ralph into CWD")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -40,6 +43,10 @@ func main() {
 }
 
 func run(cmd *cobra.Command, args []string) error {
+	if installClaudeFlag {
+		return installClaude()
+	}
+
 	// Resolve project dir
 	projectDir := projectDirFlag
 	if projectDir == "" {
@@ -118,6 +125,81 @@ func run(cmd *cobra.Command, args []string) error {
 		Model:         modelFlag,
 		MaxIterations: maxIter,
 		Session:       sess,
+	})
+}
+
+// installClaude sparse-clones scripts/ralph from github.com/snarktank/ralph
+// into ./scripts/ralph in the current working directory.
+func installClaude() error {
+	const (
+		repoURL   = "https://github.com/snarktank/ralph"
+		subPath   = "scripts/ralph"
+		branch    = "main"
+	)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getting CWD: %w", err)
+	}
+
+	dest := filepath.Join(cwd, subPath)
+	if _, err := os.Stat(dest); err == nil {
+		return fmt.Errorf("destination %s already exists", dest)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "ralph-install-*")
+	if err != nil {
+		return fmt.Errorf("creating temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	run := func(args ...string) error {
+		c := exec.Command(args[0], args[1:]...)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		return c.Run()
+	}
+
+	fmt.Printf("Cloning %s (branch %s) ...\n", repoURL, branch)
+	if err := run("git", "clone", "--depth=1", "--filter=blob:none", "--sparse",
+		"--branch", branch, repoURL, tmpDir); err != nil {
+		return fmt.Errorf("git clone: %w", err)
+	}
+	if err := run("git", "-C", tmpDir, "sparse-checkout", "set", subPath); err != nil {
+		return fmt.Errorf("git sparse-checkout: %w", err)
+	}
+
+	src := filepath.Join(tmpDir, subPath)
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return fmt.Errorf("creating scripts dir: %w", err)
+	}
+	if err := os.Rename(src, dest); err != nil {
+		// Rename across devices fails; fall back to copy.
+		if copyErr := copyDir(src, dest); copyErr != nil {
+			return fmt.Errorf("copying files: %w", copyErr)
+		}
+	}
+
+	fmt.Printf("Installed %s\n", dest)
+	return nil
+}
+
+// copyDir recursively copies src directory to dst.
+func copyDir(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(src, path)
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode())
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode())
 	})
 }
 
