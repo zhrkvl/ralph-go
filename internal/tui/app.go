@@ -60,6 +60,7 @@ type Model struct {
 	ralphDir   string
 	projectDir string
 	agentName  string
+	model      string
 	archives   []session.ArchiveEntry
 
 	// Agent loop
@@ -97,6 +98,7 @@ type Options struct {
 	RalphDir      string
 	ProjectDir    string
 	AgentName     string
+	Model         string
 	MaxIterations int
 	Session       *session.Session
 }
@@ -109,6 +111,7 @@ func NewModel(opts Options) Model {
 		ralphDir:      opts.RalphDir,
 		projectDir:    opts.ProjectDir,
 		agentName:     opts.AgentName,
+		model:         opts.Model,
 		maxIterations: opts.MaxIterations,
 		iteration:     0,
 		sessionStatus: "running",
@@ -470,6 +473,7 @@ func (m *Model) startAgentCmd() tea.Cmd {
 	m.iteration++
 	iter := m.iteration
 	agentName := m.agentName
+	model := m.model
 	ralphDir := m.ralphDir
 	projectDir := m.projectDir
 
@@ -488,7 +492,7 @@ func (m *Model) startAgentCmd() tea.Cmd {
 	return func() tea.Msg {
 		iterLog, _ := session.NewIterationLog(projectDir, taskID, taskTitle, agentName)
 
-		a := agent.New(agentName, ralphDir, projectDir)
+		a := agent.New(agentName, ralphDir, projectDir, model)
 		ch, err := a.Start(ctx)
 		if err != nil {
 			if iterLog != nil {

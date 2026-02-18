@@ -12,6 +12,7 @@ type ClaudeAgent struct {
 	*ProcessManager
 	ralphDir   string
 	projectDir string
+	model      string
 }
 
 func (a *ClaudeAgent) Name() string { return "claude" }
@@ -23,13 +24,17 @@ func (a *ClaudeAgent) Start(ctx context.Context) (<-chan string, error) {
 		return nil, fmt.Errorf("opening %s: %w", claudeMDPath, err)
 	}
 
-	cmd := exec.CommandContext(ctx, "claude",
+	args := []string{
 		"--dangerously-skip-permissions",
 		"--print",
 		"--output-format", "stream-json",
 		"--verbose",
 		"--include-partial-messages",
-	)
+	}
+	if a.model != "" {
+		args = append(args, "--model", a.model)
+	}
+	cmd := exec.CommandContext(ctx, "claude", args...)
 	cmd.Dir = a.projectDir
 
 	rawCh, err := a.start(cmd, f)

@@ -13,9 +13,10 @@ import (
 )
 
 var (
-	toolFlag      string
-	maxIterFlag   int
-	ralphDirFlag  string
+	toolFlag       string
+	modelFlag      string
+	maxIterFlag    int
+	ralphDirFlag   string
 	projectDirFlag string
 )
 
@@ -28,6 +29,7 @@ func main() {
 	}
 
 	rootCmd.Flags().StringVar(&toolFlag, "tool", "", "agent tool to use: amp or claude (default from config or amp)")
+	rootCmd.Flags().StringVar(&modelFlag, "model", "", "model to use (passed as --model to the agent)")
 	rootCmd.Flags().IntVar(&maxIterFlag, "max-iterations", 0, "maximum iterations (default from config or 10)")
 	rootCmd.Flags().StringVar(&ralphDirFlag, "ralph-dir", "", "directory containing prd.json and CLAUDE.md")
 	rootCmd.Flags().StringVar(&projectDirFlag, "project-dir", "", "working directory for agent (default: CWD)")
@@ -113,6 +115,7 @@ func run(cmd *cobra.Command, args []string) error {
 		RalphDir:      ralphDir,
 		ProjectDir:    projectDir,
 		AgentName:     agentName,
+		Model:         modelFlag,
 		MaxIterations: maxIter,
 		Session:       sess,
 	})

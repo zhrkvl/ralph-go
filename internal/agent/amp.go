@@ -13,6 +13,7 @@ type AmpAgent struct {
 	*ProcessManager
 	ralphDir   string
 	projectDir string
+	model      string
 }
 
 func (a *AmpAgent) Name() string { return "amp" }
@@ -24,7 +25,11 @@ func (a *AmpAgent) Start(ctx context.Context) (<-chan string, error) {
 		return nil, fmt.Errorf("reading %s: %w", promptPath, err)
 	}
 
-	cmd := exec.CommandContext(ctx, "amp", "--dangerously-allow-all")
+	args := []string{"--dangerously-allow-all"}
+	if a.model != "" {
+		args = append(args, "--model", a.model)
+	}
+	cmd := exec.CommandContext(ctx, "amp", args...)
 	cmd.Dir = a.projectDir
 
 	return a.start(cmd, bytes.NewReader(promptContent))

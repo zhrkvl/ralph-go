@@ -28,25 +28,28 @@ type Agent interface {
 }
 
 // New creates a new agent by name.
-func New(name, ralphDir, projectDir string) Agent {
+func New(name, ralphDir, projectDir, model string) Agent {
 	switch name {
 	case "claude":
 		return &ClaudeAgent{
 			ProcessManager: &ProcessManager{},
 			ralphDir:       ralphDir,
 			projectDir:     projectDir,
+			model:          model,
 		}
 	case "amp":
 		return &AmpAgent{
 			ProcessManager: &ProcessManager{},
 			ralphDir:       ralphDir,
 			projectDir:     projectDir,
+			model:          model,
 		}
 	default:
 		return &ClaudeAgent{
 			ProcessManager: &ProcessManager{},
 			ralphDir:       ralphDir,
 			projectDir:     projectDir,
+			model:          model,
 		}
 	}
 }
