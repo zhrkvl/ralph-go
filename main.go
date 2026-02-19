@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -62,6 +64,15 @@ func run(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load(projectDir)
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
+	}
+
+	// Warn if multiple prd.json files exist in the project tree.
+	if dupes := findPRDFiles(projectDir); len(dupes) > 1 {
+		fmt.Fprintf(os.Stderr, "Warning: multiple prd.json files found in %s:\n", projectDir)
+		for _, p := range dupes {
+			fmt.Fprintf(os.Stderr, "  %s (%s)\n", p, prdSummary(p))
+		}
+		fmt.Fprintf(os.Stderr, "Use --ralph-dir to specify which one to use.\n")
 	}
 
 	// Resolve ralph dir
@@ -233,4 +244,49 @@ func resolveRalphDir(explicit, projectDir string) string {
 func hasPRD(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, "prd.json"))
 	return err == nil
+}
+
+// prdSummary reads a prd.json and returns a human-readable task count string.
+func prdSummary(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "unreadable"
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return "empty file"
+	}
+	var p prd.PRD
+	if err := json.Unmarshal(data, &p); err != nil {
+		return "invalid JSON"
+	}
+	if p.UserStories == nil {
+		return "no userStories field"
+	}
+	total := p.TotalCount()
+	active := p.RemainingCount()
+	return fmt.Sprintf("%d tasks active, %d tasks total", active, total)
+}
+
+// findPRDFiles returns all prd.json paths found under root, skipping common
+// noise directories (.git, node_modules, vendor).
+func findPRDFiles(root string) []string {
+	skipDirs := map[string]bool{
+		".git":         true,
+		"node_modules": true,
+		"vendor":       true,
+	}
+	var found []string
+	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil // skip unreadable entries
+		}
+		if d.IsDir() && skipDirs[d.Name()] {
+			return filepath.SkipDir
+		}
+		if !d.IsDir() && d.Name() == "prd.json" {
+			found = append(found, path)
+		}
+		return nil
+	})
+	return found
 }
