@@ -39,6 +39,7 @@ type agentStartedMsg struct {
 	outputCh <-chan string
 	agent    *agent.Claude
 	iterLog  *session.IterationLog
+	cancel   context.CancelFunc
 }
 
 type agentDoneMsg struct {
@@ -118,7 +119,7 @@ func NewModel(opts Options) Model {
 		model:          opts.Model,
 		effort:         opts.Effort,
 		maxIterations:  opts.MaxIterations,
-		iteration:      0,
+		iteration:      1, // Init starts iteration 1; iterationSleepDoneMsg advances
 		sessionStatus:  "running",
 		outputLines:    make([]string, 0, maxOutputLines),
 		archives:       loadArchives(opts.RalphDir),
@@ -154,6 +155,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.outputCh = msg.outputCh
 		m.currentAgent = msg.agent
 		m.iterLog = msg.iterLog
+		m.cancelAgent = msg.cancel
 		m.agentRunning = true
 		m.agentPaused = false
 		m.appendOutput(fmt.Sprintf(
@@ -226,6 +228,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 
 	case iterationSleepDoneMsg:
+		m.iteration++
 		return m, m.startAgentCmd()
 
 	case prdReloadMsg:
@@ -498,12 +501,10 @@ func (m *Model) saveState() {
 	m.sess.SaveMeta(m.projectDir)
 }
 
-// startAgentCmd returns a Cmd that starts the next agent iteration.
-// It increments the iteration counter and launches the subprocess.
-// The result is an agentStartedMsg containing the output channel.
-func (m *Model) startAgentCmd() tea.Cmd {
-	m.iteration++
-	iter := m.iteration
+// startAgentCmd returns a Cmd that launches the agent subprocess for the
+// current iteration. The output channel and the context cancel travel back in
+// agentStartedMsg because only mutations made by Update survive.
+func (m Model) startAgentCmd() tea.Cmd {
 	model := m.model
 	effort := m.effort
 	ralphDir := m.ralphDir
@@ -519,7 +520,6 @@ func (m *Model) startAgentCmd() tea.Cmd {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	m.cancelAgent = cancel
 
 	return func() tea.Msg {
 		iterLog, _ := session.NewIterationLog(projectDir, taskID, taskTitle, agent.Name)
@@ -532,17 +532,18 @@ func (m *Model) startAgentCmd() tea.Cmd {
 		})
 		ch, err := a.Start(ctx)
 		if err != nil {
+			cancel()
 			if iterLog != nil {
 				iterLog.Close(false, false)
 			}
 			return agentDoneMsg{completed: false, errMsg: err.Error()}
 		}
 
-		_ = iter
 		return agentStartedMsg{
 			outputCh: ch,
 			agent:    a,
 			iterLog:  iterLog,
+			cancel:   cancel,
 		}
 	}
 }
