@@ -16,6 +16,7 @@ type Options struct {
 	RalphDir   string
 	ProjectDir string
 	Model      string
+	Effort     string
 }
 
 type Claude struct {
@@ -27,9 +28,9 @@ func New(opts Options) *Claude {
 	return &Claude{ProcessManager: &ProcessManager{}, opts: opts}
 }
 
-// buildArgs assembles the claude argv. Model is forwarded verbatim; claude
-// warns and falls back to its default when the value is unrecognized.
-func buildArgs(model string) []string {
+// buildArgs assembles the claude argv. Model and effort are forwarded verbatim;
+// claude warns and falls back to its default when a value is unrecognized.
+func buildArgs(model, effort string) []string {
 	args := []string{
 		"--dangerously-skip-permissions",
 		"--print",
@@ -39,6 +40,9 @@ func buildArgs(model string) []string {
 	}
 	if model != "" {
 		args = append(args, "--model", model)
+	}
+	if effort != "" {
+		args = append(args, "--effort", effort)
 	}
 	return args
 }
@@ -50,7 +54,7 @@ func (a *Claude) Start(ctx context.Context) (<-chan string, error) {
 		return nil, fmt.Errorf("opening %s: %w", claudeMDPath, err)
 	}
 
-	cmd := exec.CommandContext(ctx, "claude", buildArgs(a.opts.Model)...)
+	cmd := exec.CommandContext(ctx, "claude", buildArgs(a.opts.Model, a.opts.Effort)...)
 	cmd.Dir = a.opts.ProjectDir
 
 	rawCh, err := a.start(cmd, f)

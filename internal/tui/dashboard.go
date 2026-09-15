@@ -13,8 +13,8 @@ func renderDashboard(m *Model) string {
 
 	statusStr := renderStatus(m)
 	segments := []string{titleStyle.Render("Ralph")}
-	if m.model != "" {
-		segments = append(segments, dimStyle.Render(m.model))
+	if label := agentLabel(m.model, m.effort); label != "" {
+		segments = append(segments, dimStyle.Render(label))
 	}
 	segments = append(segments, fmt.Sprintf("Iteration %d/%d", m.iteration, m.maxIterations))
 	left := strings.Join(segments, " "+dimStyle.Render("|")+" ")
@@ -171,4 +171,16 @@ func stripAnsi(s string) string {
 		result.WriteRune(r)
 	}
 	return result.String()
+}
+
+// agentLabel describes the requested model and effort, omitting whichever is unset.
+func agentLabel(model, effort string) string {
+	parts := make([]string, 0, 2)
+	if model != "" {
+		parts = append(parts, model)
+	}
+	if effort != "" {
+		parts = append(parts, "effort:"+effort)
+	}
+	return strings.Join(parts, " ")
 }

@@ -18,6 +18,7 @@ import (
 
 var (
 	modelFlag         string
+	effortFlag        string
 	maxIterFlag       int
 	ralphDirFlag      string
 	projectDirFlag    string
@@ -33,6 +34,7 @@ func main() {
 	}
 
 	rootCmd.Flags().StringVar(&modelFlag, "model", "", "model forwarded to claude --model (alias such as opus or sonnet, or a full model name)")
+	rootCmd.Flags().StringVar(&effortFlag, "effort", "", "effort level forwarded to claude --effort (low, medium, high, xhigh, max)")
 	rootCmd.Flags().IntVar(&maxIterFlag, "max-iterations", 0, "maximum iterations (default from config or 10)")
 	rootCmd.Flags().StringVar(&ralphDirFlag, "ralph-dir", "", "directory containing prd.json and CLAUDE.md")
 	rootCmd.Flags().StringVar(&projectDirFlag, "project-dir", "", "working directory for agent (default: CWD)")
@@ -124,6 +126,7 @@ func run(cmd *cobra.Command, args []string) error {
 		RalphDir:      ralphDir,
 		ProjectDir:    projectDir,
 		Model:         modelFlag,
+		Effort:        effortFlag,
 		MaxIterations: maxIter,
 		Session:       sess,
 	})
