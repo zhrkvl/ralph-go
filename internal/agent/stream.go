@@ -69,14 +69,16 @@ func (sp *streamParser) parseLine(line string) []string {
 	}
 }
 
-// flush emits any accumulated text as a stamped line (even if no trailing newline).
+// flush returns any accumulated text as one line, even without a trailing
+// newline. Callers stamp it; stamping here would double the prefix on every
+// line that parseLine flushes.
 func (sp *streamParser) flush() []string {
 	if sp.textBuf.Len() == 0 {
 		return nil
 	}
 	line := sp.textBuf.String()
 	sp.textBuf.Reset()
-	return stamp([]string{line})
+	return []string{line}
 }
 
 // flushAndParse flushes the text buffer before returning other parsed lines.

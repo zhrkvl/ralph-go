@@ -74,7 +74,7 @@ func (a *Claude) Start(ctx context.Context) (<-chan string, error) {
 			}
 		}
 		// Flush any remaining partial text
-		for _, flushed := range parser.flush() {
+		for _, flushed := range stamp(parser.flush()) {
 			parsedCh <- flushed
 		}
 	}()
