@@ -27,6 +27,10 @@ const (
 
 const maxOutputLines = 500
 
+// promiseMarker is the sentinel CLAUDE.md asks the agent to print once every
+// user story passes.
+const promiseMarker = "<promise>COMPLETE</promise>"
+
 // Messages
 
 type agentOutputMsg struct{ line string }
@@ -71,6 +75,7 @@ type Model struct {
 	maxIterations int
 	outputLines   []string
 	sessionStatus string // running, completed, failed, interrupted
+	promiseSeen   bool   // marker printed by the iteration now ending
 	outputCh      <-chan string
 	cancelAgent   context.CancelFunc
 
@@ -164,10 +169,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.iterLog != nil {
 			m.iterLog.WriteLine(msg.line)
 		}
-		// Check for completion signal in this line
-		if strings.Contains(msg.line, "<promise>COMPLETE</promise>") {
-			// Don't wait for more output — mark completed
-			// The channel will close naturally
+		if isPromiseLine(msg.line) {
+			m.promiseSeen = true
 		}
 		return m, waitForOutput(m.outputCh)
 
@@ -181,21 +184,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.appendOutput(errorStyle.Render("Agent error: " + msg.errMsg))
 		}
 
-		// Check accumulated output for completion signal
-		completed := msg.completed
-		if !completed {
-			for _, line := range m.outputLines {
-				if strings.Contains(line, "<promise>COMPLETE</promise>") {
-					completed = true
-					break
-				}
-			}
+		promised := msg.completed || m.promiseSeen
+		m.promiseSeen = false
+
+		m.refreshPRD()
+		remaining := m.remainingStories()
+		completed := promised && remaining == 0
+
+		if m.iterLog != nil {
+			m.iterLog.Close(completed, promised)
+			m.iterLog = nil
 		}
 
-		// Close iteration log
-		if m.iterLog != nil {
-			m.iterLog.Close(completed, completed)
-			m.iterLog = nil
+		if promised && !completed {
+			m.appendOutput(warnStyle.Render(fmt.Sprintf(
+				"Completion marker seen, but %d stories still have passes=false — continuing.",
+				remaining)))
 		}
 
 		if completed {
@@ -426,6 +430,34 @@ func (m *Model) appendOutput(line string) {
 		m.outputLines = m.outputLines[len(m.outputLines)-maxOutputLines:]
 	}
 	updateViewportContent(&m.viewport, m.outputLines, m.showTimestamps)
+}
+
+// isPromiseLine reports whether a line is the completion marker itself rather
+// than prose naming it. The agent routinely mentions the marker while
+// explaining that it is not emitting one, so a substring match ends the run on
+// a negation.
+func isPromiseLine(line string) bool {
+	return strings.TrimSpace(stripTimestamp(stripAnsi(line))) == promiseMarker
+}
+
+func (m *Model) remainingStories() int {
+	if m.prd == nil {
+		return 0
+	}
+	return m.prd.RemainingCount()
+}
+
+// refreshPRD re-reads prd.json so that an ending iteration is judged against
+// what the agent just wrote rather than the last tick, which can be 5s stale.
+func (m *Model) refreshPRD() {
+	p, err := prd.Load(m.prdPath)
+	if err != nil {
+		return
+	}
+	m.prd = p
+	if m.sess != nil {
+		m.sess.TasksCompleted = p.CompletedCount()
+	}
 }
 
 func (m *Model) togglePause() {
