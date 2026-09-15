@@ -11,15 +11,13 @@ func renderDashboard(m *Model) string {
 	var b strings.Builder
 	w := m.width
 
-	// Line 1: Ralph | tool | iteration | status | branch
 	statusStr := renderStatus(m)
-	left := fmt.Sprintf("%s %s %s %s %s",
-		titleStyle.Render("Ralph"),
-		dimStyle.Render("|"),
-		m.agentName,
-		dimStyle.Render("|"),
-		fmt.Sprintf("Iteration %d/%d", m.iteration, m.maxIterations),
-	)
+	segments := []string{titleStyle.Render("Ralph")}
+	if m.model != "" {
+		segments = append(segments, dimStyle.Render(m.model))
+	}
+	segments = append(segments, fmt.Sprintf("Iteration %d/%d", m.iteration, m.maxIterations))
+	left := strings.Join(segments, " "+dimStyle.Render("|")+" ")
 	right := ""
 	if m.prd != nil {
 		right = dimStyle.Render(m.prd.BranchName)

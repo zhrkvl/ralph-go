@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/zhrkvl/ralph-go/internal/agent"
 	"github.com/zhrkvl/ralph-go/internal/config"
 	"github.com/zhrkvl/ralph-go/internal/prd"
 	"github.com/zhrkvl/ralph-go/internal/session"
@@ -16,24 +17,22 @@ import (
 )
 
 var (
-	toolFlag           string
-	modelFlag          string
-	maxIterFlag        int
-	ralphDirFlag       string
-	projectDirFlag     string
-	installClaudeFlag  bool
+	modelFlag         string
+	maxIterFlag       int
+	ralphDirFlag      string
+	projectDirFlag    string
+	installClaudeFlag bool
 )
 
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "ralph",
 		Short: "Ralph — autonomous AI agent loop with TUI",
-		Long:  "Ralph orchestrates an AI agent (Claude or Amp) to work through user stories in a PRD.",
+		Long:  "Ralph orchestrates Claude Code to work through user stories in a PRD.",
 		RunE:  run,
 	}
 
-	rootCmd.Flags().StringVar(&toolFlag, "tool", "", "agent tool to use: amp or claude (default from config or amp)")
-	rootCmd.Flags().StringVar(&modelFlag, "model", "", "model to use (passed as --model to the agent)")
+	rootCmd.Flags().StringVar(&modelFlag, "model", "", "model forwarded to claude --model (alias such as opus or sonnet, or a full model name)")
 	rootCmd.Flags().IntVar(&maxIterFlag, "max-iterations", 0, "maximum iterations (default from config or 10)")
 	rootCmd.Flags().StringVar(&ralphDirFlag, "ralph-dir", "", "directory containing prd.json and CLAUDE.md")
 	rootCmd.Flags().StringVar(&projectDirFlag, "project-dir", "", "working directory for agent (default: CWD)")
@@ -82,15 +81,7 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	ralphDir, _ = filepath.Abs(ralphDir)
 
-	// Determine tool and max iterations (CLI flags override config)
-	agentName := cfg.Agent
-	if toolFlag != "" {
-		agentName = toolFlag
-	}
-	if agentName != "amp" && agentName != "claude" {
-		return fmt.Errorf("invalid tool '%s'. Must be 'amp' or 'claude'", agentName)
-	}
-
+	// Max iterations: CLI flag overrides config
 	maxIter := cfg.MaxIterations
 	if maxIterFlag > 0 {
 		maxIter = maxIterFlag
@@ -122,7 +113,7 @@ func run(cmd *cobra.Command, args []string) error {
 	session.InitProgressFile(ralphDir)
 
 	// Create session
-	sess := session.NewSession(projectDir, prdPath, agentName, maxIter, p)
+	sess := session.NewSession(projectDir, prdPath, agent.Name, maxIter, p)
 	sess.Save(projectDir)
 	sess.SaveMeta(projectDir)
 
@@ -132,7 +123,6 @@ func run(cmd *cobra.Command, args []string) error {
 		PRDPath:       prdPath,
 		RalphDir:      ralphDir,
 		ProjectDir:    projectDir,
-		AgentName:     agentName,
 		Model:         modelFlag,
 		MaxIterations: maxIter,
 		Session:       sess,

@@ -11,7 +11,6 @@ import (
 type Config struct {
 	ConfigVersion         string         `toml:"configVersion"`
 	MaxIterations         int            `toml:"maxIterations"`
-	Agent                 string         `toml:"agent"`
 	Tracker               string         `toml:"tracker"`
 	AutoCommit            bool           `toml:"autoCommit"`
 	SubagentTracingDetail string         `toml:"subagentTracingDetail"`
@@ -23,7 +22,6 @@ func DefaultConfig() *Config {
 	return &Config{
 		ConfigVersion:         "2.1",
 		MaxIterations:         10,
-		Agent:                 "amp",
 		Tracker:               "json",
 		AutoCommit:            true,
 		SubagentTracingDetail: "full",

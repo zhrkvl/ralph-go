@@ -8,22 +8,28 @@ import (
 	"path/filepath"
 )
 
-type ClaudeAgent struct {
-	*ProcessManager
-	ralphDir   string
-	projectDir string
-	model      string
+// Name identifies the agent in session state and iteration logs.
+const Name = "claude"
+
+// Options configures a Claude run.
+type Options struct {
+	RalphDir   string
+	ProjectDir string
+	Model      string
 }
 
-func (a *ClaudeAgent) Name() string { return "claude" }
+type Claude struct {
+	*ProcessManager
+	opts Options
+}
 
-func (a *ClaudeAgent) Start(ctx context.Context) (<-chan string, error) {
-	claudeMDPath := filepath.Join(a.ralphDir, "CLAUDE.md")
-	f, err := os.Open(claudeMDPath)
-	if err != nil {
-		return nil, fmt.Errorf("opening %s: %w", claudeMDPath, err)
-	}
+func New(opts Options) *Claude {
+	return &Claude{ProcessManager: &ProcessManager{}, opts: opts}
+}
 
+// buildArgs assembles the claude argv. Model is forwarded verbatim; claude
+// warns and falls back to its default when the value is unrecognized.
+func buildArgs(model string) []string {
 	args := []string{
 		"--dangerously-skip-permissions",
 		"--print",
@@ -31,11 +37,21 @@ func (a *ClaudeAgent) Start(ctx context.Context) (<-chan string, error) {
 		"--verbose",
 		"--include-partial-messages",
 	}
-	if a.model != "" {
-		args = append(args, "--model", a.model)
+	if model != "" {
+		args = append(args, "--model", model)
 	}
-	cmd := exec.CommandContext(ctx, "claude", args...)
-	cmd.Dir = a.projectDir
+	return args
+}
+
+func (a *Claude) Start(ctx context.Context) (<-chan string, error) {
+	claudeMDPath := filepath.Join(a.opts.RalphDir, "CLAUDE.md")
+	f, err := os.Open(claudeMDPath)
+	if err != nil {
+		return nil, fmt.Errorf("opening %s: %w", claudeMDPath, err)
+	}
+
+	cmd := exec.CommandContext(ctx, "claude", buildArgs(a.opts.Model)...)
+	cmd.Dir = a.opts.ProjectDir
 
 	rawCh, err := a.start(cmd, f)
 	if err != nil {

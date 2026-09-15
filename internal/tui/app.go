@@ -33,7 +33,7 @@ type agentOutputMsg struct{ line string }
 
 type agentStartedMsg struct {
 	outputCh <-chan string
-	agent    agent.Agent
+	agent    *agent.Claude
 	iterLog  *session.IterationLog
 }
 
@@ -59,20 +59,19 @@ type Model struct {
 	prdPath    string
 	ralphDir   string
 	projectDir string
-	agentName  string
 	model      string
 	archives   []session.ArchiveEntry
 
 	// Agent loop
-	currentAgent   agent.Agent
-	agentRunning   bool
-	agentPaused    bool
-	iteration      int
-	maxIterations  int
-	outputLines    []string
-	sessionStatus  string // running, completed, failed, interrupted
-	outputCh       <-chan string
-	cancelAgent    context.CancelFunc
+	currentAgent  *agent.Claude
+	agentRunning  bool
+	agentPaused   bool
+	iteration     int
+	maxIterations int
+	outputLines   []string
+	sessionStatus string // running, completed, failed, interrupted
+	outputCh      <-chan string
+	cancelAgent   context.CancelFunc
 
 	// Viewport for agent output
 	viewport       viewport.Model
@@ -97,7 +96,6 @@ type Options struct {
 	PRDPath       string
 	RalphDir      string
 	ProjectDir    string
-	AgentName     string
 	Model         string
 	MaxIterations int
 	Session       *session.Session
@@ -105,17 +103,16 @@ type Options struct {
 
 func NewModel(opts Options) Model {
 	return Model{
-		activeView:    viewDashboard,
-		prd:           opts.PRD,
-		prdPath:       opts.PRDPath,
-		ralphDir:      opts.RalphDir,
-		projectDir:    opts.ProjectDir,
-		agentName:     opts.AgentName,
-		model:         opts.Model,
-		maxIterations: opts.MaxIterations,
-		iteration:     0,
-		sessionStatus: "running",
-		outputLines:   make([]string, 0, maxOutputLines),
+		activeView:     viewDashboard,
+		prd:            opts.PRD,
+		prdPath:        opts.PRDPath,
+		ralphDir:       opts.RalphDir,
+		projectDir:     opts.ProjectDir,
+		model:          opts.Model,
+		maxIterations:  opts.MaxIterations,
+		iteration:      0,
+		sessionStatus:  "running",
+		outputLines:    make([]string, 0, maxOutputLines),
 		archives:       loadArchives(opts.RalphDir),
 		sess:           opts.Session,
 		viewport:       viewport.New(80, 20),
@@ -472,7 +469,6 @@ func (m *Model) saveState() {
 func (m *Model) startAgentCmd() tea.Cmd {
 	m.iteration++
 	iter := m.iteration
-	agentName := m.agentName
 	model := m.model
 	ralphDir := m.ralphDir
 	projectDir := m.projectDir
@@ -490,9 +486,13 @@ func (m *Model) startAgentCmd() tea.Cmd {
 	m.cancelAgent = cancel
 
 	return func() tea.Msg {
-		iterLog, _ := session.NewIterationLog(projectDir, taskID, taskTitle, agentName)
+		iterLog, _ := session.NewIterationLog(projectDir, taskID, taskTitle, agent.Name)
 
-		a := agent.New(agentName, ralphDir, projectDir, model)
+		a := agent.New(agent.Options{
+			RalphDir:   ralphDir,
+			ProjectDir: projectDir,
+			Model:      model,
+		})
 		ch, err := a.Start(ctx)
 		if err != nil {
 			if iterLog != nil {
