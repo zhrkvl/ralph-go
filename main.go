@@ -257,26 +257,18 @@ func prdSummary(path string) string {
 	return fmt.Sprintf("%d tasks active, %d tasks total", active, total)
 }
 
-// findPRDFiles returns all prd.json paths found under root, skipping common
-// noise directories (.git, node_modules, vendor).
+// findPRDFiles returns prd.json paths that exist at the two well-known locations:
+// the project root and scripts/ralph/.
 func findPRDFiles(root string) []string {
-	skipDirs := map[string]bool{
-		".git":         true,
-		"node_modules": true,
-		"vendor":       true,
+	candidates := []string{
+		filepath.Join(root, "prd.json"),
+		filepath.Join(root, "scripts", "ralph", "prd.json"),
 	}
 	var found []string
-	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil // skip unreadable entries
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			found = append(found, p)
 		}
-		if d.IsDir() && skipDirs[d.Name()] {
-			return filepath.SkipDir
-		}
-		if !d.IsDir() && d.Name() == "prd.json" {
-			found = append(found, path)
-		}
-		return nil
-	})
+	}
 	return found
 }
